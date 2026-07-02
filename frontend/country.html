@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Country — World Explorer</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,300;1,700&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    /* ── Reset ───────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Design tokens (matches index.html) ─────────────────── */
+    :root {
+      --bg:    #0f0f0f;
+      --s1:    #181818;
+      --s2:    #222222;
+      --s3:    #2a2a2a;
+      --red:   #e50914;
+      --red2:  rgba(229, 9, 20, 0.12);
+      --txt:   #ffffff;
+      --t2:    rgba(255, 255, 255, 0.65);
+      --t3:    rgba(255, 255, 255, 0.38);
+      --t4:    rgba(255, 255, 255, 0.06);
+      --bdr:   rgba(255, 255, 255, 0.08);
+      --green: #46d369;
+    }
+
+    /* ── Base ────────────────────────────────────────────────── */
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; background: var(--bg); color: var(--txt); min-height: 100vh; }
+
+    /* ── Navigation ──────────────────────────────────────────── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: 70px;
+      padding: 0 44px;
+      display: flex; align-items: center; justify-content: space-between;
+      background: rgba(15, 15, 15, 0.96);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--bdr);
+    }
+    .nav-logo-wrap { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .nav-logo-mark { width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, var(--red), #ff4d57); display: flex; align-items: center; justify-content: center; font-size: 16px; box-shadow: 0 0 14px rgba(229,9,20,.3); }
+    .nav-logo-text { font-size: 18px; font-weight: 900; color: #fff; letter-spacing: -.04em; font-style: italic; }
+    .nav-logo-text span { color: var(--red); }
+    .back-btn       { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--t2); text-decoration: none; transition: color 0.15s; font-weight: 500; }
+    .back-btn:hover { color: #fff; }
+
+    /* ── Hero ────────────────────────────────────────────────── */
+    .hero-wrap       { margin-top: 0; position: relative; height: 80vh; min-height: 540px; overflow: hidden; background: var(--s1); }
+    .hero-img-main   { width: 100%; height: 100%; object-fit: cover; display: block; filter: saturate(1.1); }
+    .hero-overlay    {
+      position: absolute; inset: 0;
+      background:
+        linear-gradient(to right, rgba(15,15,15,.85) 0%, rgba(15,15,15,.4) 50%, transparent 100%),
+        linear-gradient(to top, rgba(15,15,15,1) 0%, rgba(15,15,15,.55) 30%, transparent 60%);
+    }
+    .hero-content    { position: absolute; bottom: 0; left: 0; right: 0; padding: 0 44px 56px; }
+    .hc-inner        { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+    .hc-left         { min-width: 0; max-width: 640px; }
+    .hero-flag-badge { font-size: 48px; margin-bottom: 14px; display: block; filter: drop-shadow(0 4px 12px rgba(0,0,0,.4)); }
+    .hero-eyebrow    { font-size: 12px; color: var(--t2); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px; font-weight: 600; }
+    .hero-name       { font-size: clamp(2.6rem, 6vw, 5rem); font-weight: 900; color: white; letter-spacing: -0.04em; line-height: 0.95; margin-bottom: 8px; text-shadow: 0 4px 20px rgba(0,0,0,.5); }
+    .hero-official   { font-size: 14px; color: var(--t2); font-weight: 300; margin-bottom: 16px; }
+    .hero-badges     { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+    .hbadge          { font-size: 12px; font-weight: 600; padding: 5px 14px; border-radius: 50px; border: 1px solid; }
+    .hb-gold         { color: #4ade80; border-color: rgba(74,222,128,.3); background: rgba(74,222,128,.1); }
+    .hb-white        { color: rgba(255,255,255,0.85); border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); }
+    .hc-right        { flex-shrink: 0; text-align: right; }
+    .coa-img         { height: 76px; object-fit: contain; opacity: 0.9; filter: drop-shadow(0 2px 10px rgba(0,0,0,0.5)); }
+
+    /* ── Photo strip ─────────────────────────────────────────── */
+    .photo-strip    { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; height: 200px; overflow: hidden; background: var(--bg); }
+    .ps-img         { width: 100%; height: 100%; object-fit: cover; cursor: pointer; transition: opacity 0.2s, transform .3s; display: block; }
+    .ps-img:hover   { opacity: 0.85; transform: scale(1.02); }
+
+    /* ── Page layout ─────────────────────────────────────────── */
+    .page-body { max-width: 1240px; margin: 0 auto; padding: 44px 44px 80px; display: grid; grid-template-columns: 1fr 360px; gap: 28px; align-items: start; }
+    @media (max-width: 900px) { .page-body { grid-template-columns: 1fr; padding-left: 20px; padding-right: 20px; } }
+
+    /* ── Content sections ────────────────────────────────────── */
+    .sec         { margin-bottom: 32px; }
+    .sec-title   { font-size: 19px; font-weight: 700; color: var(--txt); margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--bdr); display: flex; align-items: center; gap: 10px; letter-spacing: -.02em; }
+    .sec-title span { font-size: 18px; }
+
+    /* ── Quick stats ─────────────────────────────────────────── */
+    .quick-stats    { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 28px; }
+    .qs             { background: var(--s1); border: 1px solid var(--bdr); border-radius: 12px; padding: 16px 16px; transition: border-color 0.15s, transform .15s; }
+    .qs:hover       { border-color: rgba(229,9,20,.3); transform: translateY(-2px); }
+    .qs-icon        { font-size: 20px; margin-bottom: 8px; }
+    .qs-label       { font-size: 10px; color: var(--t3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; font-weight: 600; }
+    .qs-value       { font-size: 17px; font-weight: 700; color: var(--txt); line-height: 1.3; letter-spacing: -.01em; }
+    .qs-value.mono  { font-family: monospace; font-size: 15px; }
+    .qs-sub         { font-size: 11px; color: var(--t3); margin-top: 3px; }
+
+    /* ── Info table ──────────────────────────────────────────── */
+    .info-table       { background: var(--s1); border: 1px solid var(--bdr); border-radius: 12px; overflow: hidden; }
+    .it-row           { display: grid; grid-template-columns: 140px 1fr; border-bottom: 1px solid var(--bdr); padding: 13px 18px; align-items: center; gap: 12px; }
+    .it-row:last-child{ border-bottom: none; }
+    .it-row:hover     { background: var(--s2); }
+    .it-key           { font-size: 11px; color: var(--t3); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+    .it-val           { font-size: 14px; color: var(--txt); }
+
+    /* ── Fun facts ───────────────────────────────────────────── */
+    .fun-facts  { display: flex; flex-direction: column; gap: 10px; }
+    .ff         { background: var(--s1); border: 1px solid var(--bdr); border-radius: 10px; padding: 15px 17px; display: flex; gap: 14px; align-items: flex-start; transition: border-color .15s; }
+    .ff:hover   { border-color: rgba(229,9,20,.25); }
+    .ff-num     { font-family: monospace; font-size: 11px; color: var(--red); background: var(--red2); border-radius: 5px; padding: 3px 8px; flex-shrink: 0; margin-top: 2px; font-weight: 700; }
+    .ff-text    { font-size: 14px; color: var(--t2); line-height: 1.6; }
+
+    /* ── Landmarks ───────────────────────────────────────────── */
+    .landmarks-grid   { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .landmark-card    { background: var(--s1); border: 1px solid var(--bdr); border-radius: 12px; overflow: hidden; transition: border-color 0.2s, transform 0.2s; }
+    .landmark-card:hover { border-color: rgba(229,9,20,.3); transform: translateY(-3px); }
+    .landmark-img-wrap{ height: 120px; overflow: hidden; background: var(--s2); position: relative; }
+    .landmark-img     { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.4s; filter: brightness(.92); }
+    .landmark-card:hover .landmark-img { transform: scale(1.08); filter: brightness(.7); }
+    .landmark-body    { padding: 12px 14px 14px; }
+    .landmark-name    { font-size: 14px; font-weight: 700; color: var(--txt); margin-bottom: 4px; letter-spacing: -.01em; }
+    .landmark-desc    { font-size: 12px; color: var(--t3); line-height: 1.5; }
+    .landmark-tag     { display: inline-block; font-size: 10px; font-family: monospace; color: var(--red); background: var(--red2); border: 1px solid rgba(229,9,20,.25); border-radius: 4px; padding: 2px 7px; margin-top: 8px; font-weight: 700; letter-spacing: .03em; }
+
+    /* ── Sidebar ─────────────────────────────────────────────── */
+    .sidebar       { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 90px; }
+    .sb-card       { background: var(--s1); border: 1px solid var(--bdr); border-radius: 12px; overflow: hidden; transition: border-color .15s; }
+    .sb-card:hover { border-color: rgba(255,255,255,.16); }
+    .sb-card-head  { padding: 12px 16px; border-bottom: 1px solid var(--bdr); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--t3); }
+    .sb-card-body  { padding: 16px; }
+    .flag-full     { width: 100%; display: block; }
+    .native-name   { font-size: 26px; font-weight: 800; color: var(--txt); text-align: center; padding: 6px 0; letter-spacing: -.02em; }
+    .tld-tag       { display: inline-block; background: var(--s2); border: 1px solid var(--bdr); border-radius: 7px; font-family: monospace; font-size: 13px; padding: 6px 14px; color: var(--t2); font-weight: 600; }
+    .map-btn       { display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--red); color: white; font-size: 14px; font-weight: 700; padding: 13px; border-radius: 8px; text-decoration: none; transition: background 0.15s; font-family: inherit; border: none; cursor: pointer; width: 100%; letter-spacing: -.01em; }
+    .map-btn:hover { background: #f40612; }
+    .gini-bar      { height: 7px; background: var(--s2); border-radius: 50px; overflow: hidden; margin-top: 8px; }
+    .gini-fill     { height: 100%; background: var(--red); border-radius: 50px; transition: width 0.5s ease; }
+    .lang-chip     { display: inline-block; background: var(--s2); border: 1px solid var(--bdr); border-radius: 50px; font-size: 12px; padding: 5px 12px; color: var(--t2); font-weight: 600; }
+    .sb-item       { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--bdr); }
+    .sb-item:last-child { border-bottom: none; padding-bottom: 0; }
+    .sb-item:first-child { padding-top: 0; }
+    .sb-item-num   { width: 22px; height: 22px; border-radius: 50%; background: var(--red); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .sb-item-txt   { font-size: 14px; color: var(--txt); font-weight: 500; }
+
+    /* ── Lightbox ────────────────────────────────────────────── */
+    .lightbox      { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 999; display: none; align-items: center; justify-content: center; cursor: zoom-out; }
+    .lightbox.open { display: flex; }
+    .lb-img        { max-width: 90vw; max-height: 90vh; border-radius: 8px; object-fit: contain; }
+    .lb-close      { position: absolute; top: 20px; right: 24px; color: white; font-size: 28px; cursor: pointer; font-family: inherit; background: none; border: none; line-height: 1; }
+
+    /* ── Error state ─────────────────────────────────────────── */
+    .error-state      { text-align: center; padding: 140px 24px 80px; }
+    .error-state h2   { font-size: 2rem; margin-bottom: 12px; font-weight: 800; letter-spacing: -.02em; }
+    .error-state p    { color: var(--t3); margin-bottom: 24px; }
+    .error-state a    { color: var(--red); font-weight: 600; text-decoration: none; }
+    .error-state a:hover { text-decoration: underline; }
+
+    /* ── Animations ──────────────────────────────────────────── */
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    @media (max-width: 600px) {
+      nav, .hero-content, .page-body { padding-left: 20px; padding-right: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="index.html" class="nav-logo-wrap">
+    <div class="nav-logo-mark">🌍</div>
+    <span class="nav-logo-text">World<span>Explorer</span></span>
+  </a>
+  <a href="index.html" class="back-btn">← Back to all countries</a>
+</nav>
+
+<!-- ── Hero ─────────────────────────────────────────────────── -->
+<div class="hero-wrap" id="hero-wrap">
+  <div style="width:100%; height:100%; background:var(--warm); animation:pulse 1.5s infinite"></div>
+</div>
+
+<!-- ── Photo strip ───────────────────────────────────────────── -->
+<div class="photo-strip" id="photo-strip"></div>
+
+<!-- ── Lightbox ──────────────────────────────────────────────── -->
+<div class="lightbox" id="lightbox" onclick="closeLB()">
+  <button class="lb-close" onclick="closeLB()">✕</button>
+  <img class="lb-img" id="lb-img" src="" alt="" />
+</div>
+
+<!-- ── Main content ──────────────────────────────────────────── -->
+<div class="page-body" id="page-body" style="display:none">
+
+  <!-- Left column -->
+  <div>
+    <div class="quick-stats" id="quick-stats"></div>
+
+    <div class="sec">
+      <div class="sec-title"><span>🌐</span> Geography & Identity</div>
+      <div class="info-table" id="geo-table"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title"><span>🗣️</span> Culture & Society</div>
+      <div class="info-table" id="culture-table"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title"><span>📊</span> Economy & Data</div>
+      <div class="info-table" id="economy-table"></div>
+    </div>
+
+    <div class="sec" id="landmarks-sec">
+      <div class="sec-title"><span>🏛️</span> Famous Landmarks & Attractions</div>
+      <div class="landmarks-grid" id="landmarks-grid"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title"><span>💡</span> Did you know?</div>
+      <div class="fun-facts" id="fun-facts"></div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <div class="sb-card">
+      <div class="sb-card-head">Official Flag</div>
+      <img class="flag-full" id="sb-flag" src="" alt="Flag" />
+    </div>
+
+    <div class="sb-card">
+      <div class="sb-card-head">Name in native language</div>
+      <div class="sb-card-body">
+        <div class="native-name" id="sb-native"></div>
+      </div>
+    </div>
+
+    <div class="sb-card">
+      <div class="sb-card-head">Internet & Dialing</div>
+      <div class="sb-card-body" style="display:flex; flex-direction:column; gap:10px">
+        <div>
+          <div style="font-size:11px; color:var(--muted); margin-bottom:5px">Top-level domain</div>
+          <div id="sb-tld"></div>
+        </div>
+        <div>
+          <div style="font-size:11px; color:var(--muted); margin-bottom:5px">International dialing</div>
+          <span class="tld-tag" id="sb-call"></span>
+        </div>
+        <div>
+          <div style="font-size:11px; color:var(--muted); margin-bottom:5px">Vehicle code</div>
+          <span class="tld-tag" id="sb-carsign"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sb-card" id="gini-card" style="display:none">
+      <div class="sb-card-head">Gini Inequality Index</div>
+      <div class="sb-card-body">
+        <div style="font-size:12px; color:var(--muted); margin-bottom:8px">0 = perfect equality · 100 = maximum inequality</div>
+        <div style="font-size:22px; font-weight:500; color:var(--ink)" id="gini-val"></div>
+        <div class="gini-bar"><div class="gini-fill" id="gini-fill"></div></div>
+      </div>
+    </div>
+
+    <div class="sb-card">
+      <div class="sb-card-head">View on map</div>
+      <div class="sb-card-body">
+        <a class="map-btn" id="maps-link" href="#" target="_blank">🗺️ Open in Google Maps</a>
+      </div>
+    </div>
+
+    <div class="sb-card" id="foods-card">
+      <div class="sb-card-head">🍽️ Famous Foods to Try</div>
+      <div class="sb-card-body">
+        <div id="sb-foods" style="display:flex; flex-direction:column; gap:8px"></div>
+      </div>
+    </div>
+
+    <div class="sb-card" id="besttime-card">
+      <div class="sb-card-head">🗓️ Best Time to Visit</div>
+      <div class="sb-card-body">
+        <div id="sb-besttime" style="font-size:14px; line-height:1.6; color:var(--t2)">—</div>
+      </div>
+    </div>
+
+    <div class="sb-card" id="cities-card">
+      <div class="sb-card-head">🏙️ Major Cities</div>
+      <div class="sb-card-body">
+        <div id="sb-cities" style="display:flex; flex-direction:column; gap:8px"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Error state ────────────────────────────────────────────── -->
+<div id="error-area" class="error-state" style="display:none">
+  <h2>Country not found</h2>
+  <p>We couldn't find information for that country. Make sure the FastAPI backend is running.</p>
+  <a href="index.html">← Back to home</a>
+</div>
+
+<script>
+  const API = 'http://localhost:8000';
+
+  // ── Utilities ───────────────────────────────────────────────
+  function esc(str) {
+    const d = document.createElement('div');
+    d.textContent = String(str ?? '');
+    return d.innerHTML;
+  }
+
+  function safeUrl(url) {
+    try   { const u = new URL(url); return u.protocol === 'https:' ? url : '#'; }
+    catch { return '#'; }
+  }
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls)             e.className   = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function param(k)  { return new URLSearchParams(window.location.search).get(k); }
+  function fmtNum(n) { return Number(n).toLocaleString(); }
+  function fmtPop(n) {
+    if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+    if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
+    return String(n);
+  }
+
+  // Safe table row — all values HTML-escaped
+  function row(key, val) {
+    return `<div class="it-row"><div class="it-key">${esc(key)}</div><div class="it-val">${esc(val)}</div></div>`;
+  }
+
+  // ── Lightbox ─────────────────────────────────────────────────
+  function openLB(src) {
+    const safe = safeUrl(src);
+    if (safe === '#') return;
+    document.getElementById('lb-img').src = safe;
+    document.getElementById('lightbox').classList.add('open');
+  }
+  function closeLB() { document.getElementById('lightbox').classList.remove('open'); }
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLB(); });
+
+  // ── Load & error ──────────────────────────────────────────────
+  async function load() {
+    const name = param('name');
+    if (!name) { showErr(); return; }
+
+    document.title = `${String(name)} — World Explorer`;
+
+    try {
+      const r = await fetch(`${API}/country/${encodeURIComponent(name)}`);
+      if (!r.ok) { showErr(); return; }
+      render(await r.json());
+    } catch (e) {
+      console.error('Load error:', e);
+      showErr();
+    }
+  }
+
+  function showErr() {
+    document.getElementById('hero-wrap').style.display   = 'none';
+    document.getElementById('photo-strip').style.display = 'none';
+    document.getElementById('error-area').style.display  = 'block';
+  }
+
+  // ── Render ────────────────────────────────────────────────────
+  function render(d) {
+    document.title = `${String(d.name ?? '')} — World Explorer`;
+
+    renderHero(d);
+    renderPhotoStrip(d);
+    renderQuickStats(d);
+    renderTables(d);
+    renderLandmarks(d);
+    renderFunFacts(d);
+    renderSidebar(d);
+
+    document.getElementById('page-body').style.display = 'grid';
+  }
+
+  function renderHero(d) {
+    if (!d.images?.[0]) return;
+    const wrap = document.getElementById('hero-wrap');
+    wrap.innerHTML = '';
+
+    const img     = document.createElement('img');
+    img.className = 'hero-img-main';
+    img.src       = safeUrl(d.images[0]);
+    img.alt       = d.name;
+    img.loading   = 'eager';
+
+    const overlay = el('div', 'hero-overlay');
+    const content = el('div', 'hero-content');
+    const inner   = el('div', 'hc-inner');
+    const left    = el('div', 'hc-left');
+
+    left.append(
+      el('span', 'hero-flag-badge', d.flag_emoji),
+      el('div',  'hero-eyebrow',    `${d.region} · ${d.subregion}`),
+      el('div',  'hero-name',       d.name),
+      el('div',  'hero-official',   d.official !== d.name ? d.official : ''),
+    );
+
+    const badges = el('div', 'hero-badges');
+    if (d.independent) badges.appendChild(el('span', 'hbadge hb-gold',  'Independent nation'));
+    if (d.un_member)   badges.appendChild(el('span', 'hbadge hb-white', 'UN Member'));
+    badges.appendChild(el('span', 'hbadge hb-white', d.landlocked ? '🏔 Landlocked' : '🌊 Coastal'));
+    left.appendChild(badges);
+
+    inner.appendChild(left);
+
+    if (d.coat_of_arms) {
+      const right   = el('div', 'hc-right');
+      const coaImg  = document.createElement('img');
+      coaImg.className = 'coa-img';
+      coaImg.src    = safeUrl(d.coat_of_arms);
+      coaImg.alt    = 'Coat of arms';
+      right.appendChild(coaImg);
+      inner.appendChild(right);
+    }
+
+    content.appendChild(inner);
+    wrap.append(img, overlay, content);
+  }
+
+  function renderPhotoStrip(d) {
+    const strip = document.getElementById('photo-strip');
+    if (!d.images || d.images.length <= 1) { strip.style.display = 'none'; return; }
+    strip.innerHTML = '';
+    d.images.slice(1, 3).forEach((src, i) => {
+      const img     = document.createElement('img');
+      img.className = 'ps-img';
+      img.src       = safeUrl(src);
+      img.alt       = `${d.name} photo ${i + 2}`;
+      img.loading   = 'lazy';
+      img.onclick   = () => openLB(src);
+      img.onerror   = () => { img.parentElement.style.display = 'none'; };
+      strip.appendChild(img);
+    });
+  }
+
+  function renderQuickStats(d) {
+    document.getElementById('quick-stats').innerHTML = `
+      <div class="qs"><div class="qs-icon">👥</div><div class="qs-label">Population</div><div class="qs-value">${esc(fmtPop(d.population))}</div><div class="qs-sub">${esc(fmtNum(d.population))} people</div></div>
+      <div class="qs"><div class="qs-icon">🗺️</div><div class="qs-label">Area</div><div class="qs-value">${d.area ? esc(fmtNum(Math.round(d.area))) + ' km²' : 'N/A'}</div><div class="qs-sub">${d.area ? esc(fmtNum(Math.round(d.area * 0.386))) + ' mi²' : ''}</div></div>
+      <div class="qs"><div class="qs-icon">📏</div><div class="qs-label">Density</div><div class="qs-value mono">${esc(String(d.population_density))}/km²</div><div class="qs-sub">people per km²</div></div>`;
+  }
+
+  function renderTables(d) {
+    const demonym = d.demonyms && (d.demonyms.m || d.demonyms.f)
+      ? `${d.demonyms.m || ''}${d.demonyms.f && d.demonyms.f !== d.demonyms.m ? ' / ' + d.demonyms.f : ''}`
+      : 'N/A';
+
+    const giniEntries = Object.entries(d.gini || {});
+    const giniStr     = giniEntries.length
+      ? giniEntries.map(([y, v]) => `${v} (${y})`).join(', ')
+      : 'No data';
+
+    document.getElementById('geo-table').innerHTML =
+      row('Capital',       d.capital) +
+      row('Region',        `${d.region}${d.subregion ? ' · ' + d.subregion : ''}`) +
+      row('Continent',     (d.continents || []).join(', ')    || 'N/A') +
+      row('Coordinates',   d.latlng?.length ? `${d.latlng[0].toFixed(2)}°, ${d.latlng[1].toFixed(2)}°` : 'N/A') +
+      row('Capital coords',d.capital_latlng?.length ? `${d.capital_latlng[0].toFixed(2)}°, ${d.capital_latlng[1].toFixed(2)}°` : 'N/A') +
+      row('Landlocked',    d.landlocked ? 'Yes — no sea access' : 'No — has coastline') +
+      row('Alt. names',    (d.alt_spellings || []).slice(0, 3).join(', ') || 'N/A');
+
+    document.getElementById('culture-table').innerHTML =
+      row('Languages',  (d.languages || []).join(', ')  || 'N/A') +
+      row('Demonym',    demonym) +
+      row('Currency',   (d.currencies || []).map(c => `${c.name} (${c.symbol || c.code})`).join(', ') || 'N/A') +
+      row('Timezones',  (d.timezones || []).join(', ')  || 'N/A') +
+      row('Drives on',  d.drives_on) +
+      row('Week starts',d.start_of_week ? d.start_of_week.charAt(0).toUpperCase() + d.start_of_week.slice(1) : 'N/A');
+
+    document.getElementById('economy-table').innerHTML =
+      row('Gini index',   giniStr) +
+      row('Population',   fmtNum(d.population)) +
+      row('Area',         d.area ? fmtNum(Math.round(d.area)) + ' km²' : 'N/A') +
+      row('Pop. density', d.population_density + ' people/km²') +
+      row('UN Member',    d.un_member  ? 'Yes — Member of the United Nations' : 'No') +
+      row('Independent',  d.independent ? 'Yes' : 'No / Dependent territory');
+
+    // Gini sidebar
+    if (giniEntries.length) {
+      const gVal = giniEntries[giniEntries.length - 1][1];
+      document.getElementById('gini-card').style.display = 'block';
+      document.getElementById('gini-val').textContent    = gVal;
+      document.getElementById('gini-fill').style.width   = Math.min(100, gVal) + '%';
+    }
+  }
+
+  // ── Landmarks data ────────────────────────────────────────────
+  const LANDMARKS = {
+    "Japan": [
+      { name: "Mount Fuji",         tag: "Natural Wonder",  desc: "Japan's iconic snow-capped volcano and highest peak at 3,776 m.",      img: "https://images.unsplash.com/photo-1490806843957-31f4c9a91c65?w=600&q=80" },
+      { name: "Fushimi Inari Shrine",tag: "Temple & Shrine", desc: "Thousands of vermilion torii gates winding up a forested hillside.",   img: "https://images.unsplash.com/photo-1478436127897-769e1b3f0f36?w=600&q=80" },
+      { name: "Tokyo Skytree",       tag: "Architecture",    desc: "The world's tallest tower at 634 m, with sweeping city panoramas.",    img: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=600&q=80" },
+      { name: "Arashiyama Bamboo",   tag: "Nature",          desc: "A mesmerising grove of towering bamboo stalks in Kyoto.",              img: "https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=600&q=80" },
+    ],
+    "Brazil": [
+      { name: "Christ the Redeemer", tag: "Monument",        desc: "The iconic 30 m Art Deco statue overlooking Rio de Janeiro.",          img: "https://images.unsplash.com/photo-1483729558449-99ef09a8c325?w=600&q=80" },
+      { name: "Amazon Rainforest",   tag: "Natural Wonder",  desc: "The world's largest tropical rainforest, home to millions of species.", img: "https://images.unsplash.com/photo-1516306580123-e6e52b1b7b5f?w=600&q=80" },
+      { name: "Iguazu Falls",        tag: "Waterfall",       desc: "A breathtaking system of 275 waterfalls on the Argentina–Brazil border.", img: "https://images.unsplash.com/photo-1567159644669-7e2a96bb9e1d?w=600&q=80" },
+      { name: "Copacabana Beach",    tag: "Beach",           desc: "Rio's world-famous 4 km crescent of golden sand and vibrant culture.", img: "https://images.unsplash.com/photo-1518639192441-8fce0a366e2e?w=600&q=80" },
+    ],
+    "India": [
+      { name: "Taj Mahal",           tag: "UNESCO Heritage", desc: "A magnificent white marble mausoleum, one of the 7 Wonders of the World.", img: "https://images.unsplash.com/photo-1587474260584-136574528ed5?w=600&q=80" },
+      { name: "Jaipur Pink City",    tag: "Historic City",   desc: "The Rose City of Rajasthan, famed for its striking pink architecture.",  img: "https://images.unsplash.com/photo-1599661046827-dacff0c0f09a?w=600&q=80" },
+      { name: "Kerala Backwaters",   tag: "Nature",          desc: "A serene network of lagoons, lakes and canals through lush greenery.",   img: "https://images.unsplash.com/photo-1524492412937-b28074a5d7da?w=600&q=80" },
+      { name: "Golden Temple",       tag: "Temple & Shrine", desc: "The holiest Sikh gurdwara, shimmering in Amritsar's sacred lake.",      img: "https://images.unsplash.com/photo-1548013146-72479768bada?w=600&q=80" },
+    ],
+    "Germany": [
+      { name: "Neuschwanstein Castle",tag: "Castle",         desc: "The fairy-tale Bavarian castle that inspired Disney's Sleeping Beauty.", img: "https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=600&q=80" },
+      { name: "Brandenburg Gate",    tag: "Monument",        desc: "Berlin's neoclassical triumphal arch, symbol of German reunification.",  img: "https://images.unsplash.com/photo-1554072675-66db59dba46f?w=600&q=80" },
+      { name: "Cologne Cathedral",   tag: "Architecture",    desc: "A Gothic masterpiece that took over 600 years to complete.",            img: "https://images.unsplash.com/photo-1449452198679-05c7fd30f416?w=600&q=80" },
+      { name: "Rhine Valley",        tag: "Natural Wonder",  desc: "A stunning gorge lined with medieval castles, vineyards and villages.", img: "https://images.unsplash.com/photo-1528728329032-2972f65dfb3f?w=600&q=80" },
+    ],
+    "Nigeria": [
+      { name: "Olumo Rock",          tag: "Natural Wonder",  desc: "A sacred granite outcrop in Abeokuta with ancient caves and carvings.", img: "https://images.unsplash.com/photo-1555990793-da11153b2473?w=600&q=80" },
+      { name: "Zuma Rock",           tag: "Landmark",        desc: "A massive 725 m monolith that guards the gateway to Abuja.",            img: "https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=600&q=80" },
+      { name: "Lekki Conservation",  tag: "Nature",          desc: "Urban nature reserve in Lagos with Africa's longest canopy walkway.",   img: "https://images.unsplash.com/photo-1570637093408-8d9949f5b699?w=600&q=80" },
+      { name: "Yankari Game Reserve",tag: "Wildlife",        desc: "Nigeria's largest game reserve with elephants, lions and warm springs.", img: "https://images.unsplash.com/photo-1621570073642-fce6b463a32c?w=600&q=80" },
+    ],
+    "France": [
+      { name: "Eiffel Tower",        tag: "Monument",        desc: "Paris's 330 m iron lattice tower, the world's most visited monument.", img: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=600&q=80" },
+      { name: "Palace of Versailles",tag: "UNESCO Heritage", desc: "The opulent royal château with its legendary Hall of Mirrors.",        img: "https://images.unsplash.com/photo-1550340499-a6c60fc8287c?w=600&q=80" },
+      { name: "Mont Saint-Michel",   tag: "UNESCO Heritage", desc: "A tidal island abbey rising dramatically from the Normandy coast.",     img: "https://images.unsplash.com/photo-1520939817895-060bdaf4fe1b?w=600&q=80" },
+      { name: "The Louvre",          tag: "Museum",          desc: "The world's largest art museum, home to the Mona Lisa and 35,000 works.", img: "https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=600&q=80" },
+    ],
+    "Australia": [
+      { name: "Sydney Opera House",  tag: "Architecture",    desc: "An engineering marvel and UNESCO World Heritage performing arts venue.", img: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&q=80" },
+      { name: "Great Barrier Reef",  tag: "Natural Wonder",  desc: "The world's largest coral reef system, visible from space.",            img: "https://images.unsplash.com/photo-1529108190281-9a4f620bc2d8?w=600&q=80" },
+      { name: "Uluru",               tag: "Sacred Site",     desc: "A massive sandstone monolith sacred to the Anangu Aboriginal people.",  img: "https://images.unsplash.com/photo-1523482580672-f109ba8cb9be?w=600&q=80" },
+      { name: "Great Ocean Road",    tag: "Scenic Drive",    desc: "A stunning coastal highway along dramatic limestone stacks and cliffs.", img: "https://images.unsplash.com/photo-1464278533981-50106e6176b1?w=600&q=80" },
+    ],
+    "South Korea": [
+      { name: "Gyeongbokgung Palace",tag: "Historic Palace", desc: "Seoul's grand 14th-century royal palace with colourful guard ceremony.", img: "https://images.unsplash.com/photo-1538669715315-155098f0fb1d?w=600&q=80" },
+      { name: "Bukchon Hanok Village",tag: "Historic Quarter",desc: "A preserved hillside neighbourhood of traditional Korean hanok houses.", img: "https://images.unsplash.com/photo-1583431978668-c3e0f7ba8503?w=600&q=80" },
+      { name: "Jeju Island",         tag: "Natural Wonder",  desc: "A volcanic island with waterfalls, lava tubes and stunning coastline.",  img: "https://images.unsplash.com/photo-1617469767053-d3b523a0b982?w=600&q=80" },
+      { name: "N Seoul Tower",       tag: "Landmark",        desc: "An iconic communications tower atop Namsan Mountain with panoramic views.", img: "https://images.unsplash.com/photo-1562608425-57ecd4b39017?w=600&q=80" },
+    ],
+    "Mexico": [
+      { name: "Chichen Itza",        tag: "UNESCO Heritage", desc: "A magnificent Maya city with the iconic 30 m pyramid El Castillo.",    img: "https://images.unsplash.com/photo-1518638150340-f706e86654de?w=600&q=80" },
+      { name: "Teotihuacan",         tag: "Ancient Ruins",   desc: "The ancient 'City of Gods' with the Pyramid of the Sun and Moon.",     img: "https://images.unsplash.com/photo-1547995886-6dc09384c6e8?w=600&q=80" },
+      { name: "Cenote Ik Kil",       tag: "Natural Wonder",  desc: "A breathtaking open-air sinkhole with crystal-clear turquoise water.",  img: "https://images.unsplash.com/photo-1585464231875-d9ef1f5ad396?w=600&q=80" },
+      { name: "Copper Canyon",       tag: "Natural Wonder",  desc: "A system of canyons deeper and larger than the Grand Canyon.",          img: "https://images.unsplash.com/photo-1568322445389-f64ac2515020?w=600&q=80" },
+    ],
+    "South Africa": [
+      { name: "Table Mountain",      tag: "Natural Wonder",  desc: "A flat-topped mountain forming a dramatic backdrop to Cape Town.",      img: "https://images.unsplash.com/photo-1576485375217-d6a95e34d043?w=600&q=80" },
+      { name: "Kruger National Park",tag: "Wildlife",        desc: "One of Africa's largest game reserves, home to the Big Five.",          img: "https://images.unsplash.com/photo-1521618755572-156ae0cdd74d?w=600&q=80" },
+      { name: "Robben Island",       tag: "UNESCO Heritage", desc: "The island where Nelson Mandela was imprisoned for 18 years.",          img: "https://images.unsplash.com/photo-1516026672322-bc52d61a55d5?w=600&q=80" },
+      { name: "Cape of Good Hope",   tag: "Landmark",        desc: "The dramatic rocky headland at the southwestern tip of Africa.",        img: "https://images.unsplash.com/photo-1547471080-7cc2caa01a7e?w=600&q=80" },
+    ],
+    "Indonesia": [
+      { name: "Bali Temples",        tag: "Temple & Shrine", desc: "Thousands of Hindu temples including the iconic sea temple Tanah Lot.", img: "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=600&q=80" },
+      { name: "Komodo Island",       tag: "Natural Wonder",  desc: "Home to the world's largest lizard, the Komodo dragon.",               img: "https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?w=600&q=80" },
+      { name: "Borobudur Temple",    tag: "UNESCO Heritage", desc: "The world's largest Buddhist temple, built in the 9th century.",       img: "https://images.unsplash.com/photo-1555400038-63f5ba517a47?w=600&q=80" },
+      { name: "Raja Ampat Islands",  tag: "Beach & Diving",  desc: "Remote archipelago with the richest marine biodiversity on Earth.",    img: "https://images.unsplash.com/photo-1552751753-0fc84ae5b6c8?w=600&q=80" },
+    ],
+    "Argentina": [
+      { name: "Perito Moreno Glacier",tag:"Natural Wonder",  desc: "A massive advancing glacier in Patagonia, one of the world's few growing.", img: "https://images.unsplash.com/photo-1589909202802-8f4aadce1849?w=600&q=80" },
+      { name: "Buenos Aires",        tag: "City",            desc: "The 'Paris of South America' — tango, steak, and stunning architecture.", img: "https://images.unsplash.com/photo-1612294037637-ec400ca7fc0e?w=600&q=80" },
+      { name: "Iguazu Falls",        tag: "Waterfall",       desc: "Over 275 waterfalls forming one of nature's most spectacular sights.",  img: "https://images.unsplash.com/photo-1567763914977-02dc2cb2e5df?w=600&q=80" },
+      { name: "Torres del Paine",    tag: "National Park",   desc: "Patagonia's crown jewel with dramatic granite towers and glaciers.",    img: "https://images.unsplash.com/photo-1501854140801-50d01698950b?w=600&q=80" },
+    ],
+    "Egypt": [
+      { name: "Great Pyramids",      tag: "UNESCO Heritage", desc: "The last surviving ancient wonder, built over 4,500 years ago.",        img: "https://images.unsplash.com/photo-1539768942893-daf53e448371?w=600&q=80" },
+      { name: "The Sphinx",          tag: "Ancient Monument",desc: "The world's oldest monumental sculpture, guarding the Giza plateau.",   img: "https://images.unsplash.com/photo-1553913861-c0fddf2619ee?w=600&q=80" },
+      { name: "Luxor Temple",        tag: "Ancient Ruins",   desc: "A magnificent temple complex on the east bank of the Nile, built in 1400 BC.", img: "https://images.unsplash.com/photo-1572252009286-268acec5ca0a?w=600&q=80" },
+      { name: "Valley of the Kings", tag: "UNESCO Heritage", desc: "The burial ground of pharaohs including Tutankhamun's famous tomb.",    img: "https://images.unsplash.com/photo-1565967971482-69903b64f0a0?w=600&q=80" },
+    ],
+    "Iceland": [
+      { name: "Northern Lights",     tag: "Natural Wonder",  desc: "Magical aurora borealis dancing across Iceland's dark winter skies.",   img: "https://images.unsplash.com/photo-1531168556467-80aace0d0144?w=600&q=80" },
+      { name: "Blue Lagoon",         tag: "Geothermal Spa",  desc: "A world-famous geothermal spa with milky blue waters in a lava field.", img: "https://images.unsplash.com/photo-1504893524553-b855bce32c67?w=600&q=80" },
+      { name: "Gullfoss Waterfall",  tag: "Waterfall",       desc: "The 'Golden Falls', a majestic two-tiered waterfall on the Hvítá river.", img: "https://images.unsplash.com/photo-1476610182048-b716b8518aae?w=600&q=80" },
+      { name: "Hallgrímskirkja",     tag: "Architecture",    desc: "Reykjavík's striking 74 m concrete church inspired by volcanic basalt.", img: "https://images.unsplash.com/photo-1539066869117-3b71d4b9ee79?w=600&q=80" },
+    ],
+    "Thailand": [
+      { name: "Grand Palace Bangkok",tag: "Historic Palace", desc: "A dazzling complex of temples and halls that was home to Thai kings.",  img: "https://images.unsplash.com/photo-1528181304800-259b08848526?w=600&q=80" },
+      { name: "Wat Pho Temple",      tag: "Temple & Shrine", desc: "Home to the famous 46 m long Reclining Buddha, gilded in gold.",       img: "https://images.unsplash.com/photo-1506665531195-3566af2b4dfa?w=600&q=80" },
+      { name: "Phi Phi Islands",     tag: "Beach & Diving",  desc: "Stunning limestone karst islands with crystal waters and white sand.",  img: "https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?w=600&q=80" },
+      { name: "Chiang Mai Old City", tag: "Historic Quarter",desc: "A walled old city with over 300 temples and vibrant night markets.",    img: "https://images.unsplash.com/photo-1563492065599-3520f775eeed?w=600&q=80" },
+    ],
+    "Norway": [
+      { name: "Geirangerfjord",      tag: "Natural Wonder",  desc: "A UNESCO-listed fjord with towering waterfalls and dramatic cliffs.",    img: "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?w=600&q=80" },
+      { name: "Trolltunga",          tag: "Hike & View",     desc: "A legendary rock ledge jutting 700 m above Lake Ringedalsvatnet.",      img: "https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=600&q=80" },
+      { name: "Bryggen Wharf",       tag: "UNESCO Heritage", desc: "Bergen's colourful 14th-century wooden hanseatic waterfront district.",  img: "https://images.unsplash.com/photo-1601134467661-3d775b999c9b?w=600&q=80" },
+      { name: "Lofoten Islands",     tag: "Natural Wonder",  desc: "Dramatic archipelago with jagged peaks, fishing villages and beaches.", img: "https://images.unsplash.com/photo-1520769945061-0a448c463865?w=600&q=80" },
+    ],
+    "Kenya": [
+      { name: "Maasai Mara Reserve", tag: "Wildlife",        desc: "Africa's most famous game reserve, home to the Great Migration.",       img: "https://images.unsplash.com/photo-1547970810-dc1eac37d174?w=600&q=80" },
+      { name: "Mount Kenya",         tag: "Natural Wonder",  desc: "Africa's second highest peak with glaciers, alpine lakes and unique flora.", img: "https://images.unsplash.com/photo-1489392191049-fc10c97e64b6?w=600&q=80" },
+      { name: "Lake Nakuru",         tag: "National Park",   desc: "A Rift Valley lake famous for its spectacular flamingo flocks.",         img: "https://images.unsplash.com/photo-1534177616072-ef7dc120449d?w=600&q=80" },
+      { name: "Amboseli National Park",tag:"Wildlife",       desc: "Iconic views of Kilimanjaro with large elephant herds in the foreground.", img: "https://images.unsplash.com/photo-1516426122078-c23e76319801?w=600&q=80" },
+    ],
+    "Canada": [
+      { name: "Niagara Falls",       tag: "Natural Wonder",  desc: "Three massive waterfalls straddling the Canada–USA border.",            img: "https://images.unsplash.com/photo-1517935706615-2717063c2225?w=600&q=80" },
+      { name: "Banff National Park", tag: "National Park",   desc: "Turquoise glacial lakes, Rocky Mountain peaks and abundant wildlife.",   img: "https://images.unsplash.com/photo-1503614472-8c93d56e92ce?w=600&q=80" },
+      { name: "CN Tower Toronto",    tag: "Architecture",    desc: "A 553 m tower with a glass floor and revolving restaurant.",             img: "https://images.unsplash.com/photo-1569681157854-bb4d04a24d9a?w=600&q=80" },
+      { name: "Old Quebec City",     tag: "UNESCO Heritage", desc: "North America's only walled city north of Mexico, steeped in French heritage.", img: "https://images.unsplash.com/photo-1444509543503-7949f6a678b8?w=600&q=80" },
+    ],
+    "Portugal": [
+      { name: "Belém Tower",         tag: "UNESCO Heritage", desc: "A 16th-century fortress on the Tagus river, symbol of the Age of Discovery.", img: "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=600&q=80" },
+      { name: "Pena Palace Sintra",  tag: "Castle",          desc: "A wildly colourful Romanticist palace perched above the clouds in Sintra.", img: "https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=600&q=80" },
+      { name: "Douro Valley",        tag: "Natural Wonder",  desc: "Terraced vineyards lining the Douro River, producing world-class port wine.", img: "https://images.unsplash.com/photo-1513735539092-fe0b8a76c7e6?w=600&q=80" },
+      { name: "Jerónimos Monastery", tag: "UNESCO Heritage", desc: "A flamboyant Manueline Gothic monastery commissioned by King Manuel I.", img: "https://images.unsplash.com/photo-1548707309-dcebeab9ea9b?w=600&q=80" },
+    ],
+    "Chile": [
+      { name: "Torres del Paine",    tag: "National Park",   desc: "Patagonia's most iconic park with granite spires, glaciers and pumas.",  img: "https://images.unsplash.com/photo-1501854140801-50d01698950b?w=600&q=80" },
+      { name: "Easter Island",       tag: "UNESCO Heritage", desc: "Remote island famous for its 900 mysterious moai stone statues.",        img: "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=600&q=80" },
+      { name: "Atacama Desert",      tag: "Natural Wonder",  desc: "The driest non-polar desert on Earth with alien landscapes and stargazing.", img: "https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=600&q=80" },
+      { name: "Marble Caves",        tag: "Natural Wonder",  desc: "Stunning turquoise caverns carved by waves into pure marble over millennia.", img: "https://images.unsplash.com/photo-1588392520862-9b8e2b4b3f05?w=600&q=80" },
+    ],
+  };
+
+  function renderLandmarks(d) {
+    const grid    = document.getElementById('landmarks-grid');
+    const entries = LANDMARKS[d.name] || [];
+    grid.innerHTML = '';
+
+    if (!entries.length) {
+      const p = el('p', '', 'Landmark information coming soon.');
+      p.style.cssText = 'color:var(--muted); font-size:14px';
+      grid.appendChild(p);
+      return;
+    }
+
+    entries.forEach(lm => {
+      // Card
+      const card  = el('div', 'landmark-card');
+
+      // Image
+      const wrap  = el('div', 'landmark-img-wrap');
+      const img   = document.createElement('img');
+      img.className = 'landmark-img';
+      img.src       = safeUrl(lm.img);
+      img.alt       = lm.name;
+      img.loading   = 'lazy';
+      img.onerror   = () => { wrap.style.background = 'var(--warm)'; img.style.display = 'none'; };
+      wrap.appendChild(img);
+
+      // Body
+      const body = el('div', 'landmark-body');
+      body.appendChild(el('div', 'landmark-name', lm.name));
+      body.appendChild(el('div', 'landmark-desc', lm.desc));
+      body.appendChild(el('span','landmark-tag',  lm.tag));
+
+      card.append(wrap, body);
+      grid.appendChild(card);
+    });
+  }
+
+  function renderFunFacts(d) {
+    const container = document.getElementById('fun-facts');
+    container.innerHTML = '';
+    (d.fun_facts || []).forEach((fact, i) => {
+      const div = el('div', 'ff');
+      div.append(
+        el('span', 'ff-num',  `0${i + 1}`),
+        el('span', 'ff-text', fact),
+      );
+      container.appendChild(div);
+    });
+  }
+
+  function renderSidebar(d) {
+    // Flag
+    const flagEl = document.getElementById('sb-flag');
+    if (d.flag_svg || d.flag_png) {
+      flagEl.src = safeUrl(d.flag_svg || d.flag_png);
+      flagEl.alt = `Flag of ${d.name}`;
+    }
+
+    // Native name
+    document.getElementById('sb-native').textContent = d.native_name || d.name;
+
+    // TLD chips
+    const tldEl = document.getElementById('sb-tld');
+    tldEl.innerHTML = '';
+    (d.tld || []).forEach(t => tldEl.appendChild(el('span', 'tld-tag', t)));
+
+    // Calling code + vehicle code
+    document.getElementById('sb-call').textContent    = d.calling_code || 'N/A';
+    document.getElementById('sb-carsign').textContent = (d.car_signs || []).join(', ') || 'N/A';
+
+    // Maps link
+    if (d.google_maps) document.getElementById('maps-link').href = safeUrl(d.google_maps);
+
+    // Famous Foods
+    const foodsEl = document.getElementById('sb-foods');
+    foodsEl.innerHTML = '';
+    if (d.famous_foods && d.famous_foods.length) {
+      d.famous_foods.forEach((food, i) => {
+        const row = el('div', 'sb-item');
+        row.appendChild(el('div', 'sb-item-num', String(i + 1)));
+        row.appendChild(el('div', 'sb-item-txt', food));
+        foodsEl.appendChild(row);
+      });
+    } else {
+      document.getElementById('foods-card').style.display = 'none';
+    }
+
+    // Best Time to Visit
+    if (d.best_time) {
+      document.getElementById('sb-besttime').textContent = d.best_time;
+    } else {
+      document.getElementById('besttime-card').style.display = 'none';
+    }
+
+    // Major Cities
+    const citiesEl = document.getElementById('sb-cities');
+    citiesEl.innerHTML = '';
+    if (d.major_cities && d.major_cities.length) {
+      d.major_cities.forEach(city => {
+        const row = el('div', 'sb-item');
+        const pin = el('div', 'sb-item-num', '📍');
+        pin.style.background = 'transparent';
+        pin.style.fontSize = '15px';
+        row.appendChild(pin);
+        row.appendChild(el('div', 'sb-item-txt', city));
+        citiesEl.appendChild(row);
+      });
+    } else {
+      document.getElementById('cities-card').style.display = 'none';
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>

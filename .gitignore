@@ -1,0 +1,56 @@
+# ── Python ──────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── Virtual environments ────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+.env
+
+# ── Environment variables / secrets ────────────────
+.env
+.env.local
+.env.*.local
+*.env
+secrets.py
+config.local.py
+
+# ── OS files ────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ── IDE / editor ────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+
+# ── Logs ────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+
+# ── Test / coverage ──────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ── Node (if you add a frontend build later) ────────
+node_modules/
