@@ -26,6 +26,13 @@
       --t4:    rgba(255, 255, 255, 0.06);
       --bdr:   rgba(255, 255, 255, 0.08);
       --green: #46d369;
+
+      /* Carried over from the earlier light theme — these were still
+         referenced in markup and script after the dark theme landed, and an
+         undefined var silently kills the whole declaration. */
+      --ink:   var(--txt);
+      --muted: var(--t3);
+      --warm:  var(--s2);
     }
 
     /* ── Base ────────────────────────────────────────────────── */
@@ -136,7 +143,6 @@
     .map-btn:hover { background: #f40612; }
     .gini-bar      { height: 7px; background: var(--s2); border-radius: 50px; overflow: hidden; margin-top: 8px; }
     .gini-fill     { height: 100%; background: var(--red); border-radius: 50px; transition: width 0.5s ease; }
-    .lang-chip     { display: inline-block; background: var(--s2); border: 1px solid var(--bdr); border-radius: 50px; font-size: 12px; padding: 5px 12px; color: var(--t2); font-weight: 600; }
     .sb-item       { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--bdr); }
     .sb-item:last-child { border-bottom: none; padding-bottom: 0; }
     .sb-item:first-child { padding-top: 0; }
@@ -185,7 +191,9 @@
 <!-- ── Lightbox ──────────────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLB()">
   <button class="lb-close" onclick="closeLB()">✕</button>
-  <img class="lb-img" id="lb-img" src="" alt="" />
+  <!-- No src attribute: an empty one resolves to the page URL, making the
+       browser download this whole document as an image. -->
+  <img class="lb-img" id="lb-img" alt="" />
 </div>
 
 <!-- ── Main content ──────────────────────────────────────────── -->
@@ -224,9 +232,9 @@
   <!-- Sidebar -->
   <div class="sidebar">
 
-    <div class="sb-card">
+    <div class="sb-card" id="flag-card">
       <div class="sb-card-head">Official Flag</div>
-      <img class="flag-full" id="sb-flag" src="" alt="Flag" />
+      <img class="flag-full" id="sb-flag" alt="Flag" />
     </div>
 
     <div class="sb-card">
@@ -324,8 +332,13 @@
   }
 
   function param(k)  { return new URLSearchParams(window.location.search).get(k); }
-  function fmtNum(n) { return Number(n).toLocaleString(); }
+
+  // The API sends null for figures it genuinely doesn't have, so guard before
+  // formatting — Number(null) is 0, which would render as a real "0 people".
+  function hasNum(n) { return typeof n === 'number' && isFinite(n); }
+  function fmtNum(n) { return hasNum(n) ? Number(n).toLocaleString() : 'N/A'; }
   function fmtPop(n) {
+    if (!hasNum(n))  return 'N/A';
     if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
     if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
     if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
@@ -387,15 +400,22 @@
   }
 
   function renderHero(d) {
-    if (!d.images?.[0]) return;
     const wrap = document.getElementById('hero-wrap');
     wrap.innerHTML = '';
 
-    const img     = document.createElement('img');
-    img.className = 'hero-img-main';
-    img.src       = safeUrl(d.images[0]);
-    img.alt       = d.name;
-    img.loading   = 'eager';
+    // The photo is optional: only the 20 curated countries have one. This
+    // used to return early when there was no image, leaving the loading
+    // skeleton pulsing forever with no name, flag or badges.
+    const heroSrc = d.images?.[0] ? safeUrl(d.images[0]) : '#';
+    let img = null;
+    if (heroSrc !== '#') {
+      img = document.createElement('img');
+      img.className = 'hero-img-main';
+      img.src       = heroSrc;
+      img.alt       = d.name;
+      img.loading   = 'eager';
+      img.onerror   = () => img.remove();
+    }
 
     const overlay = el('div', 'hero-overlay');
     const content = el('div', 'hero-content');
@@ -428,30 +448,46 @@
     }
 
     content.appendChild(inner);
-    wrap.append(img, overlay, content);
+    if (img) wrap.appendChild(img);
+    wrap.append(overlay, content);
   }
 
   function renderPhotoStrip(d) {
     const strip = document.getElementById('photo-strip');
-    if (!d.images || d.images.length <= 1) { strip.style.display = 'none'; return; }
-    strip.innerHTML = '';
-    d.images.slice(1, 3).forEach((src, i) => {
+    const shots = (d.images || []).slice(1, 3).filter(src => safeUrl(src) !== '#');
+    if (!shots.length) { strip.style.display = 'none'; return; }
+
+    strip.style.display = '';
+    strip.innerHTML     = '';
+
+    // Reflow so a surviving photo spans the full width instead of leaving a
+    // hole where its partner was.
+    const relayout = () => {
+      const left = strip.querySelectorAll('img').length;
+      if (!left) strip.style.display = 'none';
+      else       strip.style.gridTemplateColumns = `repeat(${left}, 1fr)`;
+    };
+
+    shots.forEach((src, i) => {
       const img     = document.createElement('img');
       img.className = 'ps-img';
       img.src       = safeUrl(src);
       img.alt       = `${d.name} photo ${i + 2}`;
       img.loading   = 'lazy';
       img.onclick   = () => openLB(src);
-      img.onerror   = () => { img.parentElement.style.display = 'none'; };
+      // Drop just this image. This used to hide img.parentElement — which is
+      // the strip itself — so one dead photo took the working one with it.
+      img.onerror   = () => { img.remove(); relayout(); };
       strip.appendChild(img);
     });
+    relayout();
   }
 
   function renderQuickStats(d) {
     document.getElementById('quick-stats').innerHTML = `
-      <div class="qs"><div class="qs-icon">👥</div><div class="qs-label">Population</div><div class="qs-value">${esc(fmtPop(d.population))}</div><div class="qs-sub">${esc(fmtNum(d.population))} people</div></div>
+      <div class="qs"><div class="qs-icon">👥</div><div class="qs-label">Population</div><div class="qs-value">${esc(fmtPop(d.population))}</div><div class="qs-sub">${hasNum(d.population) ? esc(fmtNum(d.population)) + ' people' : 'No figure available'}</div></div>
       <div class="qs"><div class="qs-icon">🗺️</div><div class="qs-label">Area</div><div class="qs-value">${d.area ? esc(fmtNum(Math.round(d.area))) + ' km²' : 'N/A'}</div><div class="qs-sub">${d.area ? esc(fmtNum(Math.round(d.area * 0.386))) + ' mi²' : ''}</div></div>
-      <div class="qs"><div class="qs-icon">📏</div><div class="qs-label">Density</div><div class="qs-value mono">${esc(String(d.population_density))}/km²</div><div class="qs-sub">people per km²</div></div>`;
+      <div class="qs"><div class="qs-icon">📏</div><div class="qs-label">Density</div><div class="qs-value mono">${hasNum(d.population_density) ? esc(String(d.population_density)) + '/km²' : 'N/A'}</div><div class="qs-sub">people per km²</div></div>`;
   }
 
   function renderTables(d) {
@@ -485,7 +521,7 @@
       row('Gini index',   giniStr) +
       row('Population',   fmtNum(d.population)) +
       row('Area',         d.area ? fmtNum(Math.round(d.area)) + ' km²' : 'N/A') +
-      row('Pop. density', d.population_density + ' people/km²') +
+      row('Pop. density', hasNum(d.population_density) ? d.population_density + ' people/km²' : 'N/A') +
       row('UN Member',    d.un_member  ? 'Yes — Member of the United Nations' : 'No') +
       row('Independent',  d.independent ? 'Yes' : 'No / Dependent territory');
 
@@ -509,7 +545,7 @@
     "Brazil": [
       { name: "Christ the Redeemer", tag: "Monument",        desc: "The iconic 30 m Art Deco statue overlooking Rio de Janeiro.",          img: "https://images.unsplash.com/photo-1483729558449-99ef09a8c325?w=600&q=80" },
       { name: "Amazon Rainforest",   tag: "Natural Wonder",  desc: "The world's largest tropical rainforest, home to millions of species.", img: "https://images.unsplash.com/photo-1516306580123-e6e52b1b7b5f?w=600&q=80" },
-      { name: "Iguazu Falls",        tag: "Waterfall",       desc: "A breathtaking system of 275 waterfalls on the Argentina–Brazil border.", img: "https://images.unsplash.com/photo-1567159644669-7e2a96bb9e1d?w=600&q=80" },
+      { name: "Iguazu Falls",        tag: "Waterfall",       desc: "A breathtaking system of 275 waterfalls on the Argentina–Brazil border.", img: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Iguazu_Falls_Brazilian_Side_2019.jpg/960px-Iguazu_Falls_Brazilian_Side_2019.jpg" },
       { name: "Copacabana Beach",    tag: "Beach",           desc: "Rio's world-famous 4 km crescent of golden sand and vibrant culture.", img: "https://images.unsplash.com/photo-1518639192441-8fce0a366e2e?w=600&q=80" },
     ],
     "India": [
@@ -527,8 +563,8 @@
     "Nigeria": [
       { name: "Olumo Rock",          tag: "Natural Wonder",  desc: "A sacred granite outcrop in Abeokuta with ancient caves and carvings.", img: "https://images.unsplash.com/photo-1555990793-da11153b2473?w=600&q=80" },
       { name: "Zuma Rock",           tag: "Landmark",        desc: "A massive 725 m monolith that guards the gateway to Abuja.",            img: "https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=600&q=80" },
-      { name: "Lekki Conservation",  tag: "Nature",          desc: "Urban nature reserve in Lagos with Africa's longest canopy walkway.",   img: "https://images.unsplash.com/photo-1570637093408-8d9949f5b699?w=600&q=80" },
-      { name: "Yankari Game Reserve",tag: "Wildlife",        desc: "Nigeria's largest game reserve with elephants, lions and warm springs.", img: "https://images.unsplash.com/photo-1621570073642-fce6b463a32c?w=600&q=80" },
+      { name: "Lekki Conservation",  tag: "Nature",          desc: "Urban nature reserve in Lagos with Africa's longest canopy walkway.",   img: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/78/Lekki_Conservation_Centre_4.jpg/960px-Lekki_Conservation_Centre_4.jpg" },
+      { name: "Yankari Game Reserve",tag: "Wildlife",        desc: "Nigeria's largest game reserve with elephants, lions and warm springs.", img: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/00/A_welcoming_baboon_with_its_kid_at_Yankari_Game_Reserve%2C_Bauchi%2C_Nigeria.jpg/960px-A_welcoming_baboon_with_its_kid_at_Yankari_Game_Reserve%2C_Bauchi%2C_Nigeria.jpg" },
     ],
     "France": [
       { name: "Eiffel Tower",        tag: "Monument",        desc: "Paris's 330 m iron lattice tower, the world's most visited monument.", img: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=600&q=80" },
@@ -544,13 +580,13 @@
     ],
     "South Korea": [
       { name: "Gyeongbokgung Palace",tag: "Historic Palace", desc: "Seoul's grand 14th-century royal palace with colourful guard ceremony.", img: "https://images.unsplash.com/photo-1538669715315-155098f0fb1d?w=600&q=80" },
-      { name: "Bukchon Hanok Village",tag: "Historic Quarter",desc: "A preserved hillside neighbourhood of traditional Korean hanok houses.", img: "https://images.unsplash.com/photo-1583431978668-c3e0f7ba8503?w=600&q=80" },
+      { name: "Bukchon Hanok Village",tag: "Historic Quarter",desc: "A preserved hillside neighbourhood of traditional Korean hanok houses.", img: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Traditional_hanok_houses_at_golden_hour_in_Bukchon_Hanok_Village_in_Seoul.jpg/960px-Traditional_hanok_houses_at_golden_hour_in_Bukchon_Hanok_Village_in_Seoul.jpg" },
       { name: "Jeju Island",         tag: "Natural Wonder",  desc: "A volcanic island with waterfalls, lava tubes and stunning coastline.",  img: "https://images.unsplash.com/photo-1617469767053-d3b523a0b982?w=600&q=80" },
-      { name: "N Seoul Tower",       tag: "Landmark",        desc: "An iconic communications tower atop Namsan Mountain with panoramic views.", img: "https://images.unsplash.com/photo-1562608425-57ecd4b39017?w=600&q=80" },
+      { name: "N Seoul Tower",       tag: "Landmark",        desc: "An iconic communications tower atop Namsan Mountain with panoramic views.", img: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/N-Seoul-Tower_and_Namsan_Park_%2826876783888%29.jpg/960px-N-Seoul-Tower_and_Namsan_Park_%2826876783888%29.jpg" },
     ],
     "Mexico": [
       { name: "Chichen Itza",        tag: "UNESCO Heritage", desc: "A magnificent Maya city with the iconic 30 m pyramid El Castillo.",    img: "https://images.unsplash.com/photo-1518638150340-f706e86654de?w=600&q=80" },
-      { name: "Teotihuacan",         tag: "Ancient Ruins",   desc: "The ancient 'City of Gods' with the Pyramid of the Sun and Moon.",     img: "https://images.unsplash.com/photo-1547995886-6dc09384c6e8?w=600&q=80" },
+      { name: "Teotihuacan",         tag: "Ancient Ruins",   desc: "The ancient 'City of Gods' with the Pyramid of the Sun and Moon.",     img: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Pyramid_of_the_Sun%2C_Teotihuacan%2C_from_path_to_parking_lot.jpg/960px-Pyramid_of_the_Sun%2C_Teotihuacan%2C_from_path_to_parking_lot.jpg" },
       { name: "Cenote Ik Kil",       tag: "Natural Wonder",  desc: "A breathtaking open-air sinkhole with crystal-clear turquoise water.",  img: "https://images.unsplash.com/photo-1585464231875-d9ef1f5ad396?w=600&q=80" },
       { name: "Copper Canyon",       tag: "Natural Wonder",  desc: "A system of canyons deeper and larger than the Grand Canyon.",          img: "https://images.unsplash.com/photo-1568322445389-f64ac2515020?w=600&q=80" },
     ],
@@ -568,21 +604,21 @@
     ],
     "Argentina": [
       { name: "Perito Moreno Glacier",tag:"Natural Wonder",  desc: "A massive advancing glacier in Patagonia, one of the world's few growing.", img: "https://images.unsplash.com/photo-1589909202802-8f4aadce1849?w=600&q=80" },
-      { name: "Buenos Aires",        tag: "City",            desc: "The 'Paris of South America' — tango, steak, and stunning architecture.", img: "https://images.unsplash.com/photo-1612294037637-ec400ca7fc0e?w=600&q=80" },
-      { name: "Iguazu Falls",        tag: "Waterfall",       desc: "Over 275 waterfalls forming one of nature's most spectacular sights.",  img: "https://images.unsplash.com/photo-1567763914977-02dc2cb2e5df?w=600&q=80" },
+      { name: "Buenos Aires",        tag: "City",            desc: "The 'Paris of South America' — tango, steak, and stunning architecture.", img: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Obelisco_de_Buenos_Aires_at_sunset.jpg/960px-Obelisco_de_Buenos_Aires_at_sunset.jpg" },
+      { name: "Iguazu Falls",        tag: "Waterfall",       desc: "Over 275 waterfalls forming one of nature's most spectacular sights.",  img: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cb/Rainbows_at_Iguazu_Falls_frrom_Argentina.jpg/960px-Rainbows_at_Iguazu_Falls_frrom_Argentina.jpg" },
       { name: "Torres del Paine",    tag: "National Park",   desc: "Patagonia's crown jewel with dramatic granite towers and glaciers.",    img: "https://images.unsplash.com/photo-1501854140801-50d01698950b?w=600&q=80" },
     ],
     "Egypt": [
       { name: "Great Pyramids",      tag: "UNESCO Heritage", desc: "The last surviving ancient wonder, built over 4,500 years ago.",        img: "https://images.unsplash.com/photo-1539768942893-daf53e448371?w=600&q=80" },
       { name: "The Sphinx",          tag: "Ancient Monument",desc: "The world's oldest monumental sculpture, guarding the Giza plateau.",   img: "https://images.unsplash.com/photo-1553913861-c0fddf2619ee?w=600&q=80" },
       { name: "Luxor Temple",        tag: "Ancient Ruins",   desc: "A magnificent temple complex on the east bank of the Nile, built in 1400 BC.", img: "https://images.unsplash.com/photo-1572252009286-268acec5ca0a?w=600&q=80" },
-      { name: "Valley of the Kings", tag: "UNESCO Heritage", desc: "The burial ground of pharaohs including Tutankhamun's famous tomb.",    img: "https://images.unsplash.com/photo-1565967971482-69903b64f0a0?w=600&q=80" },
+      { name: "Valley of the Kings", tag: "UNESCO Heritage", desc: "The burial ground of pharaohs including Tutankhamun's famous tomb.",    img: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/Thebes%2C_Luxor%2C_Egypt%2C_Panoramic_view_of_the_Valley_of_the_Kings.jpg/960px-Thebes%2C_Luxor%2C_Egypt%2C_Panoramic_view_of_the_Valley_of_the_Kings.jpg" },
     ],
     "Iceland": [
       { name: "Northern Lights",     tag: "Natural Wonder",  desc: "Magical aurora borealis dancing across Iceland's dark winter skies.",   img: "https://images.unsplash.com/photo-1531168556467-80aace0d0144?w=600&q=80" },
       { name: "Blue Lagoon",         tag: "Geothermal Spa",  desc: "A world-famous geothermal spa with milky blue waters in a lava field.", img: "https://images.unsplash.com/photo-1504893524553-b855bce32c67?w=600&q=80" },
       { name: "Gullfoss Waterfall",  tag: "Waterfall",       desc: "The 'Golden Falls', a majestic two-tiered waterfall on the Hvítá river.", img: "https://images.unsplash.com/photo-1476610182048-b716b8518aae?w=600&q=80" },
-      { name: "Hallgrímskirkja",     tag: "Architecture",    desc: "Reykjavík's striking 74 m concrete church inspired by volcanic basalt.", img: "https://images.unsplash.com/photo-1539066869117-3b71d4b9ee79?w=600&q=80" },
+      { name: "Hallgrímskirkja",     tag: "Architecture",    desc: "Reykjavík's striking 74 m concrete church inspired by volcanic basalt.", img: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Hallgr%C3%ADmskirkja%2C_Reykjav%C3%ADk%2C_Iceland%2C_20230506_1701_5380.jpg/960px-Hallgr%C3%ADmskirkja%2C_Reykjav%C3%ADk%2C_Iceland%2C_20230506_1701_5380.jpg" },
     ],
     "Thailand": [
       { name: "Grand Palace Bangkok",tag: "Historic Palace", desc: "A dazzling complex of temples and halls that was home to Thai kings.",  img: "https://images.unsplash.com/photo-1528181304800-259b08848526?w=600&q=80" },
@@ -593,7 +629,7 @@
     "Norway": [
       { name: "Geirangerfjord",      tag: "Natural Wonder",  desc: "A UNESCO-listed fjord with towering waterfalls and dramatic cliffs.",    img: "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?w=600&q=80" },
       { name: "Trolltunga",          tag: "Hike & View",     desc: "A legendary rock ledge jutting 700 m above Lake Ringedalsvatnet.",      img: "https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=600&q=80" },
-      { name: "Bryggen Wharf",       tag: "UNESCO Heritage", desc: "Bergen's colourful 14th-century wooden hanseatic waterfront district.",  img: "https://images.unsplash.com/photo-1601134467661-3d775b999c9b?w=600&q=80" },
+      { name: "Bryggen Wharf",       tag: "UNESCO Heritage", desc: "Bergen's colourful 14th-century wooden hanseatic waterfront district.",  img: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/Bryggen%2C_Bergen%2C_Noruega%2C_2019-09-08%2C_DD_115-117_PAN.jpg/960px-Bryggen%2C_Bergen%2C_Noruega%2C_2019-09-08%2C_DD_115-117_PAN.jpg" },
       { name: "Lofoten Islands",     tag: "Natural Wonder",  desc: "Dramatic archipelago with jagged peaks, fishing villages and beaches.", img: "https://images.unsplash.com/photo-1520769945061-0a448c463865?w=600&q=80" },
     ],
     "Kenya": [
@@ -605,20 +641,20 @@
     "Canada": [
       { name: "Niagara Falls",       tag: "Natural Wonder",  desc: "Three massive waterfalls straddling the Canada–USA border.",            img: "https://images.unsplash.com/photo-1517935706615-2717063c2225?w=600&q=80" },
       { name: "Banff National Park", tag: "National Park",   desc: "Turquoise glacial lakes, Rocky Mountain peaks and abundant wildlife.",   img: "https://images.unsplash.com/photo-1503614472-8c93d56e92ce?w=600&q=80" },
-      { name: "CN Tower Toronto",    tag: "Architecture",    desc: "A 553 m tower with a glass floor and revolving restaurant.",             img: "https://images.unsplash.com/photo-1569681157854-bb4d04a24d9a?w=600&q=80" },
-      { name: "Old Quebec City",     tag: "UNESCO Heritage", desc: "North America's only walled city north of Mexico, steeped in French heritage.", img: "https://images.unsplash.com/photo-1444509543503-7949f6a678b8?w=600&q=80" },
+      { name: "CN Tower Toronto",    tag: "Architecture",    desc: "A 553 m tower with a glass floor and revolving restaurant.",             img: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/CN_Tower%2C_Toronto%2C_Canada_%28Unsplash_DJ_kOgH5u0o%29.jpg/960px-CN_Tower%2C_Toronto%2C_Canada_%28Unsplash_DJ_kOgH5u0o%29.jpg" },
+      { name: "Old Quebec City",     tag: "UNESCO Heritage", desc: "North America's only walled city north of Mexico, steeped in French heritage.", img: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Castle_Frontenac_Qu%C3%A9bec_City_Old_Quebec_Quebec.jpg/960px-Castle_Frontenac_Qu%C3%A9bec_City_Old_Quebec_Quebec.jpg" },
     ],
     "Portugal": [
       { name: "Belém Tower",         tag: "UNESCO Heritage", desc: "A 16th-century fortress on the Tagus river, symbol of the Age of Discovery.", img: "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=600&q=80" },
       { name: "Pena Palace Sintra",  tag: "Castle",          desc: "A wildly colourful Romanticist palace perched above the clouds in Sintra.", img: "https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=600&q=80" },
-      { name: "Douro Valley",        tag: "Natural Wonder",  desc: "Terraced vineyards lining the Douro River, producing world-class port wine.", img: "https://images.unsplash.com/photo-1513735539092-fe0b8a76c7e6?w=600&q=80" },
+      { name: "Douro Valley",        tag: "Natural Wonder",  desc: "Terraced vineyards lining the Douro River, producing world-class port wine.", img: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c0/The_Douro_Valley_vineyards_terraced.jpg/960px-The_Douro_Valley_vineyards_terraced.jpg" },
       { name: "Jerónimos Monastery", tag: "UNESCO Heritage", desc: "A flamboyant Manueline Gothic monastery commissioned by King Manuel I.", img: "https://images.unsplash.com/photo-1548707309-dcebeab9ea9b?w=600&q=80" },
     ],
     "Chile": [
       { name: "Torres del Paine",    tag: "National Park",   desc: "Patagonia's most iconic park with granite spires, glaciers and pumas.",  img: "https://images.unsplash.com/photo-1501854140801-50d01698950b?w=600&q=80" },
       { name: "Easter Island",       tag: "UNESCO Heritage", desc: "Remote island famous for its 900 mysterious moai stone statues.",        img: "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=600&q=80" },
       { name: "Atacama Desert",      tag: "Natural Wonder",  desc: "The driest non-polar desert on Earth with alien landscapes and stargazing.", img: "https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=600&q=80" },
-      { name: "Marble Caves",        tag: "Natural Wonder",  desc: "Stunning turquoise caverns carved by waves into pure marble over millennia.", img: "https://images.unsplash.com/photo-1588392520862-9b8e2b4b3f05?w=600&q=80" },
+      { name: "Marble Caves",        tag: "Natural Wonder",  desc: "Stunning turquoise caverns carved by waves into pure marble over millennia.", img: "https://upload.wikimedia.org/wikipedia/commons/9/98/Capillas_de_M%C3%A1rmol.JPG" },
     ],
   };
 
@@ -673,11 +709,16 @@
   }
 
   function renderSidebar(d) {
-    // Flag
-    const flagEl = document.getElementById('sb-flag');
-    if (d.flag_svg || d.flag_png) {
-      flagEl.src = safeUrl(d.flag_svg || d.flag_png);
-      flagEl.alt = `Flag of ${d.name}`;
+    // Flag — hide the whole card rather than leaving a broken <img> behind
+    const flagEl  = document.getElementById('sb-flag');
+    const flagSrc = safeUrl(d.flag_svg || d.flag_png || '');
+    const hideFlag = () => { document.getElementById('flag-card').style.display = 'none'; };
+    if (flagSrc !== '#') {
+      flagEl.src     = flagSrc;
+      flagEl.alt     = `Flag of ${d.name}`;
+      flagEl.onerror = hideFlag;
+    } else {
+      hideFlag();
     }
 
     // Native name

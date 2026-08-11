@@ -39,8 +39,10 @@ cd world-explorer
 ```bash
 cd backend
 pip install -r requirements.txt
-python -m uvicorn main:app --reload
+python -m uvicorn main:app --reload --forwarded-allow-ips=""
 ```
+
+> `--forwarded-allow-ips=""` stops uvicorn trusting `X-Forwarded-For` when nothing is proxying it, which keeps the rate limiter honest. See [Before deploying this publicly](#before-deploying-this-publicly).
 
 Backend runs at → `http://localhost:8000`
 
@@ -128,8 +130,8 @@ world-explorer/
 |-------|-----------|
 | Backend | Python 3, FastAPI, httpx, slowapi |
 | Frontend | HTML5, CSS3, Vanilla JavaScript |
-| Data | REST Countries API (free, no key needed) |
-| Photos | Unsplash (curated per country) |
+| Data | [mledoze/countries](https://github.com/mledoze/countries) JSON mirror (free, no key needed) |
+| Photos | Unsplash + Wikimedia Commons (curated per country) |
 | Flags | flagcdn.com |
 | Fonts | Google Fonts (Playfair Display + DM Sans) |
 
@@ -137,11 +139,21 @@ world-explorer/
 
 ## 🔒 Security Features
 
-- **Input validation** — country names validated with regex allowlist, max 100 chars
-- **Rate limiting** — 60 req/min on country lookup, 30 req/min on search and listing
-- **CORS restricted** — only localhost origins allowed (no wildcard)
-- **XSS prevention** — all API data escaped before DOM insertion; `safeUrl()` on all links and images
-- **No API keys** — uses only free public APIs, nothing sensitive in the codebase
+- **Input validation** — country names checked against a character allowlist, max 100 chars. Angle brackets, quotes and slashes are rejected before any lookup.
+- **XSS prevention** — all upstream data is inserted with `textContent` or HTML-escaped first, and `safeUrl()` forces `https:` on every image and link. Verified by rendering a poisoned country record: scripts do not execute and `javascript:` URLs collapse to `#`.
+- **CORS restricted** — explicit origin list, no wildcard, and credentials are *not* enabled, so no cookie or auth header is ever exposed cross-origin.
+- **Rate limiting** — 60 req/min on `/` and country lookup, 30 req/min on search and listing.
+- **No API keys** — only free public data sources; nothing sensitive in the codebase or git history.
+- **Pinned dependencies** — exact versions in `requirements.txt`, so a fresh install can't silently pull a different release.
+
+### Before deploying this publicly
+
+These are fine for local use but are **not** production-safe as-is:
+
+1. **Rate limiting is bypassable behind a trusted proxy.** `uvicorn[standard]` honours `X-Forwarded-For` from `127.0.0.1` by default and rewrites the client IP, so rotating that header resets the limit bucket. Run with `--forwarded-allow-ips=""` when there is no proxy in front, or set it to your proxy's IP only.
+2. **Remove the `"null"` CORS origin.** It's there so opening `index.html` from disk works. Any site can get `Origin: null` via a sandboxed iframe, so leaving it in lets third parties read the API and spend its rate limit.
+3. **Add the real front-end origin** to `allow_origins` and drop the localhost entries.
+4. **Consider disabling the auto-generated docs** (`FastAPI(docs_url=None, redoc_url=None)`) — `/docs` and `/openapi.json` are public. Harmless here since the data is public, but it does advertise the full API surface.
 
 ---
 
@@ -149,7 +161,9 @@ world-explorer/
 
 Japan · Brazil · India · Germany · Nigeria · France · Australia · South Korea · Mexico · South Africa · Indonesia · Argentina · Egypt · Iceland · Thailand · Norway · Kenya · Canada · Portugal · Chile
 
-> The backend works for **any country in the world** via the REST Countries API — the 20 above just have curated photos and fun facts built in.
+> The backend resolves **any country in the world** from the dataset, so `/country/italy` returns its capital, area, languages, currencies and borders.
+>
+> The 20 above are the *curated* set. The upstream dataset carries no population, timezone, flag-image or gini data, so those are embedded in the backend for these 20 only — along with photos, fun facts and the travel-guide sidebar. For anything else the API returns `null` for those figures and the page shows "N/A" rather than inventing a number. Flags and the Google Maps link are derived from the country's ISO code, so they work everywhere.
 
 ---
 

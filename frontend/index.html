@@ -125,8 +125,6 @@
     .section { padding: 0 44px 36px; }
     .sec-hd { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
     .sec-t { font-size: 18px; font-weight: 700; letter-spacing: -.03em; }
-    .sec-exp { font-size: 13px; color: var(--red); font-weight: 600; cursor: pointer; margin-left: auto; opacity: 0; transform: translateX(-6px); transition: all .2s; }
-    .section:hover .sec-exp { opacity: 1; transform: translateX(0); }
 
     .card-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: none; }
     .card-row::-webkit-scrollbar { display: none; }
@@ -292,7 +290,6 @@
 <script>
   const API = 'http://localhost:8000';
   let ALL = [];
-  let af = 'All';
   let hi = 0, htimer, ptimer, progress = 0;
   let featuredList = [];
 
@@ -301,8 +298,9 @@
     try { const p = new URL(u); return p.protocol === 'https:' ? u : '#'; }
     catch { return '#'; }
   }
-  function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+  function hasNum(n) { return typeof n === 'number' && isFinite(n); }
   function fmtPop(n) {
+    if (!hasNum(n)) return 'N/A';
     if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
     if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
     if (n >= 1e3) return Math.round(n / 1e3) + 'K';
@@ -434,7 +432,7 @@
   function renderTop10() {
     const el = document.getElementById('r-top10');
     el.innerHTML = '';
-    const top = [...ALL].sort((a, b) => b.population - a.population).slice(0, 10);
+    const top = [...ALL].sort((a, b) => (b.population ?? 0) - (a.population ?? 0)).slice(0, 10);
     top.forEach((c, i) => {
       const a = document.createElement('a');
       a.className = 't10';
@@ -464,7 +462,6 @@
   }
 
   function setR(region, btn) {
-    af = region;
     document.querySelectorAll('.rpill').forEach(b => b.classList.remove('on'));
     btn.classList.add('on');
     const data = region === 'All' ? ALL : ALL.filter(c => c.region === region);
@@ -545,9 +542,12 @@
   async function init() {
     try {
       const r = await fetch(`${API}/countries/all`);
+      // A 429 used to fall through to .json(), whose error object has no
+      // .length, and got reported as "Backend not running".
+      if (!r.ok) throw new Error(r.status === 429 ? 'rate-limited' : `HTTP ${r.status}`);
       ALL = await r.json();
 
-      if (!ALL.length) throw new Error('Empty response');
+      if (!Array.isArray(ALL) || !ALL.length) throw new Error('Empty response');
 
       // Featured rotation
       const featNames = ['Japan', 'Norway', 'Iceland', 'Egypt', 'Brazil', 'Thailand', 'France', 'Kenya'];
@@ -569,16 +569,23 @@
       renderRow('r-other', ALL.filter(c => ['Americas', 'Africa', 'Oceania'].includes(c.region)));
 
     } catch (e) {
-      document.getElementById('h-name').textContent = 'Backend not running';
-      document.getElementById('h-desc').textContent = 'Start the FastAPI backend to see countries.';
+      const limited = e.message === 'rate-limited';
+      document.getElementById('h-name').textContent = limited ? 'Too many requests' : 'Backend not running';
+      document.getElementById('h-desc').textContent = limited
+        ? 'The API is rate-limiting this browser. Wait a minute and reload.'
+        : 'Start the FastAPI backend to see countries.';
       document.getElementById('h-play-btn').style.display = 'none';
       document.querySelectorAll('.card-row, .t10-row').forEach(el => {
-        el.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-state-icon">⚠️</div>
-            <div>Backend not running. Start it with:</div>
-            <code>uvicorn main:app --reload</code>
-          </div>`;
+        el.innerHTML = limited
+          ? `<div class="empty-state">
+               <div class="empty-state-icon">⏳</div>
+               <div>Rate limited. Wait a minute and reload.</div>
+             </div>`
+          : `<div class="empty-state">
+               <div class="empty-state-icon">⚠️</div>
+               <div>Backend not running. Start it with:</div>
+               <code>uvicorn main:app --reload</code>
+             </div>`;
       });
     }
   }

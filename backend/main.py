@@ -1,13 +1,18 @@
 """
 World Explorer — FastAPI Backend
 Data source: github.com/mledoze/countries (free, no API key needed).
-Static fields (population, timezones, flags etc.) are embedded directly
-so they are always accurate and never depend on the external source.
-Images are curated Unsplash photos, picked individually per country.
+
+That dataset carries no population, timezone, flag-image or gini fields, so
+those are embedded in STATIC below for the 20 curated countries. Any other
+country still resolves, but returns null for the figures we don't have rather
+than a fabricated zero.
+
+Images are curated per country: Unsplash photos plus Wikimedia Commons files
+where the original Unsplash IDs had gone dead.
 """
 
-import asyncio
 import re
+from urllib.parse import quote
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -26,6 +31,14 @@ app     = FastAPI(title="World Explorer API")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# Local-development origins only. Credentials are deliberately NOT enabled,
+# so no cookie or auth header is ever exposed cross-origin.
+#
+# DEPLOYMENT: drop the "null" entry. It exists so the README's "just open
+# frontend/index.html" (file://) flow works, but *any* site can obtain
+# Origin: null via a sandboxed iframe, which would let third parties read
+# this API and spend its rate limit. Serving the frontend over http (Live
+# Server) does not need it.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -52,7 +65,12 @@ _CACHE: list[dict] = []
 # ---------------------------------------------------------------------------
 
 MAX_QUERY_LEN = 100
-ALLOWED_CHARS = re.compile(r"^[a-zA-Z\s\-'\.]+$")
+
+# Allowlist: letters (including accented ones), digits, and the punctuation that
+# genuinely appears in country names — "Côte d'Ivoire", "Timor-Leste",
+# "Bolivia (Plurinational State of)". Everything else (angle brackets, quotes,
+# slashes, control characters) is still rejected.
+ALLOWED_CHARS = re.compile(r"^[\w\s\-'.,()]+$", re.UNICODE)
 
 
 def validate_country_name(name: str) -> str:
@@ -82,6 +100,26 @@ def build_currencies(raw: dict) -> list[dict]:
         {"code": code, "name": info.get("name", code), "symbol": info.get("symbol", "")}
         for code, info in raw.items()
     ]
+
+
+def build_flag_urls(raw: dict) -> tuple[str, str]:
+    """Derive flagcdn URLs from the ISO 3166-1 alpha-2 code.
+
+    Used for countries outside our curated 20, which have no STATIC entry —
+    without this their flag panel renders empty.
+    """
+    # isascii() matters: str.isalpha() is True for non-ASCII letters, which
+    # would let a malformed upstream record build a junk URL path.
+    code = (raw.get("cca2") or "").lower()
+    if len(code) != 2 or not code.isascii() or not code.isalpha():
+        return "", ""
+    return f"https://flagcdn.com/w320/{code}.png", f"https://flagcdn.com/{code}.svg"
+
+
+def build_maps_url(common_name: str) -> str:
+    if not common_name:
+        return ""
+    return "https://www.google.com/maps/place/" + quote(common_name)
 
 
 # ---------------------------------------------------------------------------
@@ -464,8 +502,19 @@ def resolve_static_key(common_name: str) -> str:
     return common_name
 
 
+MIN_PREFIX_LEN = 3
+
+
 def find_country(data: list[dict], name: str) -> dict | None:
-    """Find a country by common name, official name, or alt spellings."""
+    """Find a country by common name, official name, or alt spellings.
+
+    Falls back to a prefix match on the common name or any word within it, so
+    "portug" finds Portugal and "korea" finds South Korea. The old fallback
+    matched a substring anywhere in either name, which returned Afghanistan
+    for "republic" (via "Islamic Republic of Afghanistan") and Åland Islands
+    for "land" — matches the user never asked for. Ties go to a curated
+    country first, then to the shortest name.
+    """
     name_lower = name.lower()
     for c in data:
         n = c.get("name", {})
@@ -475,14 +524,28 @@ def find_country(data: list[dict], name: str) -> dict | None:
             any(a.lower() == name_lower for a in c.get("altSpellings", []))
         ):
             return c
-    for c in data:
-        n = c.get("name", {})
-        if (
-            name_lower in n.get("common",   "").lower() or
-            name_lower in n.get("official", "").lower()
-        ):
-            return c
-    return None
+
+    if len(name_lower) < MIN_PREFIX_LEN:
+        return None
+
+    def tokens(c: dict) -> list[str]:
+        # The common name and each of its words, so "korea" reaches
+        # "South Korea". Official names are deliberately excluded: matching
+        # those made "republic" resolve to Cuba, via "Republic of Cuba".
+        common = c.get("name", {}).get("common", "")
+        return [common, *common.split()]
+
+    def rank(c: dict) -> tuple[int, int]:
+        # Curated countries win ties, so "korea" gives South Korea — the one
+        # the rest of the app actually has photos and facts for.
+        common = c["name"].get("common", "")
+        return (0 if common in STATIC else 1, len(common))
+
+    matches = [
+        c for c in data
+        if any(t.lower().startswith(name_lower) for t in tokens(c))
+    ]
+    return min(matches, key=rank) if matches else None
 
 
 # ---------------------------------------------------------------------------
@@ -513,7 +576,7 @@ COUNTRY_IMAGES: dict[str, list[str]] = {
     "Nigeria": [
         "https://images.unsplash.com/photo-1555990793-da11153b2473?w=1200&q=80",
         "https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=800&q=80",
-        "https://images.unsplash.com/photo-1570637093408-8d9949f5b699?w=800&q=80",
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Lagos_skyline.jpg/960px-Lagos_skyline.jpg",
     ],
     "France": [
         "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1200&q=80",
@@ -528,7 +591,7 @@ COUNTRY_IMAGES: dict[str, list[str]] = {
     "South Korea": [
         "https://images.unsplash.com/photo-1538669715315-155098f0fb1d?w=1200&q=80",
         "https://images.unsplash.com/photo-1617469767053-d3b523a0b982?w=800&q=80",
-        "https://images.unsplash.com/photo-1583431978668-c3e0f7ba8503?w=800&q=80",
+        "https://upload.wikimedia.org/wikipedia/commons/4/4b/Seoul-Cityscape-03.jpg",
     ],
     "Mexico": [
         "https://images.unsplash.com/photo-1518638150340-f706e86654de?w=1200&q=80",
@@ -547,13 +610,13 @@ COUNTRY_IMAGES: dict[str, list[str]] = {
     ],
     "Argentina": [
         "https://images.unsplash.com/photo-1589909202802-8f4aadce1849?w=1200&q=80",
-        "https://images.unsplash.com/photo-1612294037637-ec400ca7fc0e?w=800&q=80",
-        "https://images.unsplash.com/photo-1567763914977-02dc2cb2e5df?w=800&q=80",
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/193_-_Buenos_Aires_-_Puerto_Madero_-_Janvier_2010.jpg/960px-193_-_Buenos_Aires_-_Puerto_Madero_-_Janvier_2010.jpg",
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Perito_Moreno_Glacier_Patagonia_Argentina_Luca_Galuzzi_2005.JPG/960px-Perito_Moreno_Glacier_Patagonia_Argentina_Luca_Galuzzi_2005.JPG",
     ],
     "Egypt": [
         "https://images.unsplash.com/photo-1539768942893-daf53e448371?w=1200&q=80",
         "https://images.unsplash.com/photo-1580418827493-f2b22c0a76cb?w=800&q=80",
-        "https://images.unsplash.com/photo-1601921004897-b7d582002468?w=800&q=80",
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Templo_de_Karnak%2C_Luxor%2C_Egipto%2C_2022-04-03%2C_DD_144.jpg/960px-Templo_de_Karnak%2C_Luxor%2C_Egipto%2C_2022-04-03%2C_DD_144.jpg",
     ],
     "Iceland": [
         "https://images.unsplash.com/photo-1531168556467-80aace0d0144?w=1200&q=80",
@@ -567,7 +630,7 @@ COUNTRY_IMAGES: dict[str, list[str]] = {
     ],
     "Norway": [
         "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?w=1200&q=80",
-        "https://images.unsplash.com/photo-1601134467661-3d775b999c9b?w=800&q=80",
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/8/86/Lofoten%2C_Norway_%28Unsplash%29.jpg/960px-Lofoten%2C_Norway_%28Unsplash%29.jpg",
         "https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=800&q=80",
     ],
     "Kenya": [
@@ -577,12 +640,12 @@ COUNTRY_IMAGES: dict[str, list[str]] = {
     ],
     "Canada": [
         "https://images.unsplash.com/photo-1517935706615-2717063c2225?w=1200&q=80",
-        "https://images.unsplash.com/photo-1569681157854-bb4d04a24d9a?w=800&q=80",
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Peyto_Lake-Banff_NP-Canada.jpg/960px-Peyto_Lake-Banff_NP-Canada.jpg",
         "https://images.unsplash.com/photo-1503614472-8c93d56e92ce?w=800&q=80",
     ],
     "Portugal": [
         "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=1200&q=80",
-        "https://images.unsplash.com/photo-1513735539092-fe0b8a76c7e6?w=800&q=80",
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Douro_river_in_Porto_%2811%29.jpg/960px-Douro_river_in_Porto_%2811%29.jpg",
         "https://images.unsplash.com/photo-1548707309-dcebeab9ea9b?w=800&q=80",
     ],
     "Chile": [
@@ -723,7 +786,8 @@ TAGLINES: dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 @app.get("/")
-def root():
+@limiter.limit("60/minute")
+def root(request: Request):
     return {
         "status": "World Explorer API is running",
         "endpoints": {
@@ -753,7 +817,7 @@ async def get_all_countries(request: Request):
             "region":      c.get("region", ""),
             "subregion":   c.get("subregion", ""),
             "capital":     (c.get("capital") or ["N/A"])[0],
-            "population":  s.get("population", 0),
+            "population":  s.get("population"),
             "cover_image": COUNTRY_IMAGES[display_name][0],
             "tagline":     TAGLINES.get(display_name, "Explore this incredible country."),
         })
@@ -766,6 +830,9 @@ async def get_all_countries(request: Request):
 async def get_country(name: str, request: Request):
     """Return full data for a single country."""
     safe_name = validate_country_name(name)
+    # Resolve alternate spellings up front. NAME_ALIASES was only consulted
+    # after a successful lookup, so entries like "égypte" could never match.
+    safe_name = NAME_ALIASES.get(safe_name.lower(), safe_name)
     all_data  = await fetch_all_raw()
     c         = find_country(all_data, safe_name)
 
@@ -782,8 +849,14 @@ async def get_country(name: str, request: Request):
 
     display_name = static_key if static_key in STATIC else api_common
     idd          = c.get("idd") or {}
-    pop          = s.get("population", c.get("population", 0))
     area         = c.get("area") or 0
+
+    # The upstream dataset carries no population figures at all, so anything
+    # outside our curated 20 has none. Report that honestly as null rather
+    # than falling back to 0, which the page rendered as a real "0 people".
+    pop          = s.get("population")
+
+    fb_png, fb_svg = build_flag_urls(c)
 
     return {
         # Identity
@@ -792,8 +865,8 @@ async def get_country(name: str, request: Request):
         "native_name":        s.get("native_name", display_name),
         "tagline":            TAGLINES.get(display_name, "Explore this incredible country."),
         "flag_emoji":         c.get("flag", ""),
-        "flag_svg":           s.get("flag_svg", ""),
-        "flag_png":           s.get("flag_png", ""),
+        "flag_svg":           s.get("flag_svg") or fb_svg,
+        "flag_png":           s.get("flag_png") or fb_png,
         "coat_of_arms":       "",
         "alt_spellings":      c.get("altSpellings", []),
 
@@ -810,7 +883,7 @@ async def get_country(name: str, request: Request):
 
         # Population
         "population":         pop,
-        "population_density": round(pop / area, 1) if area > 0 else 0,
+        "population_density": round(pop / area, 1) if pop and area > 0 else None,
 
         # Culture
         "currencies":         build_currencies(c.get("currencies") or {}),
@@ -828,7 +901,7 @@ async def get_country(name: str, request: Request):
         "un_member":          s.get("un_member", c.get("unMember", False)),
 
         # Extra
-        "google_maps":        s.get("google_maps", ""),
+        "google_maps":        s.get("google_maps") or build_maps_url(display_name),
         "gini":               s.get("gini", {}),
 
         # Curated

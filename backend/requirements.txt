@@ -1,4 +1,7 @@
-fastapi
-uvicorn[standard]
-httpx
-slowapi
+# Pinned so a fresh install can't silently pull a different (or tampered)
+# release than the one this project was tested against.
+# To upgrade deliberately: bump a pin, reinstall, re-test.
+fastapi==0.139.0
+uvicorn[standard]==0.49.0
+httpx==0.28.1
+slowapi==0.1.10
